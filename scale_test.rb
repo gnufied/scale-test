@@ -25,7 +25,7 @@ class UpgradeOCP
   end
 
   def install_cluster
-    # self.start_install()
+    self.start_install()
     self.set_kubeconfig()
 
     self.scale_machinesets(MACHINE_COUNT)
