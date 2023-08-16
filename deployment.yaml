@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: sandbox
+  template:
+    metadata:
+      labels:
+        run: sandbox
+    spec:
+      # affinity:
+      #   nodeAffinity:
+      #     requiredDuringSchedulingIgnoredDuringExecution:
+      #       nodeSelectorTerms:
+      #       - matchExpressions:
+      #         - key: custom-target.openshift.io/worker
+      #           operator: In
+      #           values:
+      #           - ""
+      containers:
+      - name: sandbox
+        image: gcr.io/google_containers/busybox
+        command:
+          - "/bin/sh"
+          - "-c"
+          - "while true; do date; echo `date` >>/mnt/test/date; sleep 5; done"
+        volumeMounts:
+          - name: vol
+            mountPath: /mnt/test
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: vol
+        persistentVolumeClaim:
+          claimName: myclaim
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: myclaim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: thin
+  resources:
+    requests:
+      storage: 1Gi
