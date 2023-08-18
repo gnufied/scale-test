@@ -7,11 +7,11 @@ class UpgradeOCP
   include FileUtils
 
   INSTALL_COMMAND = "./openshift-install create cluster"
-  MACHINE_COUNT = 10
+  MACHINE_COUNT = 11
   RUNNING_STATE = "Running"
 
   POD_NAMESPACE = "emacs"
-  POD_COUNT = 10
+  POD_COUNT = 300
 
   VERSION_413 = "4.13.9"
   VERSION_414 = "4.14.0-ec.4"
@@ -55,10 +55,9 @@ class UpgradeOCP
     self.wait_for_upgrade(VERSION_414)
     self.wait_for_nodes_upgrade(KUBELET_REGEXP_414)
 
-    log("Upgrade to 4.14 is finished")
-
-    # Wait for all nodes to be ready
     self.wait_for_nodes_ready
+
+    log("Upgrade to 4.14 is finished")
 
     # make sure that pods are still running after upgrade
     log("********** Checking if pods are still running after 4.14 upgrade **********")
@@ -88,7 +87,7 @@ class UpgradeOCP
 
   def wait_for_nodes_ready
     loop do
-      system("kubectl wait --for=condition=Ready nodes --all --timeout=600s || return 1")
+      system("oc wait --for=condition=Ready nodes --all --timeout=600s || return 1")
       if $?.exitstatus == 0
         break
       end
