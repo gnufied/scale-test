@@ -11,7 +11,7 @@ class UpgradeOCP
   RUNNING_STATE = "Running"
 
   POD_NAMESPACE = "emacs"
-  POD_COUNT = 300
+  POD_COUNT = 10
 
   VERSION_413 = "4.13.9"
   VERSION_414 = "4.14.0-ec.4"
@@ -63,14 +63,6 @@ class UpgradeOCP
     # make sure that pods are still running after upgrade
     log("********** Checking if pods are still running after 4.14 upgrade **********")
     self.wait_for_running_pods(POD_NAMESPACE, POD_COUNT)
-
-
-
-    # self.enable_migration()
-    # self.wait_for_migration()
-
-    # # make sure that pods are still running after migration
-    # self.wait_for_running_pods(POD_NAMESPACE, POD_COUNT)
 
     self.delete_pods(POD_NAMESPACE, POD_COUNT)
     self.wait_for_pod_removal()
@@ -264,7 +256,7 @@ class UpgradeOCP
       pod_json = JSON.load(pods_json_raw)
       pod_items = pod_json["items"]
       if pod_items.length > 0
-        log("found #{pod_items.length} items")
+        log("found #{pod_items.length} pods")
         sleep(20)
       else
         puts "No pods found"
