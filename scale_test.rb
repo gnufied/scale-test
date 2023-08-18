@@ -13,7 +13,14 @@ class UpgradeOCP
   POD_NAMESPACE = "emacs"
   POD_COUNT = 300
 
-  FINAL_VERSION = "4.13.9"
+  VERSION_413 = "4.13.9"
+  VERSION_414 = "4.14.0-ec.4"
+
+  KUBELET_REGEXP_413 = Regexp.new("v1\.26\.6")
+  KUBELET_REGEXP_414 = Regexp.new("v1\.27\.3")
+
+  IMAGE_413 = "quay.io/openshift-release-dev/ocp-release:4.13.9-x86_64"
+  IMAGE_414 = "quay.io/openshift-release-dev/ocp-release:4.14.0-ec.4-x86_64"
 
   def build_upgrade_destroy_loop
     loop do
@@ -32,15 +39,38 @@ class UpgradeOCP
     self.wait_for_machines(MACHINE_COUNT)
     self.create_pods(POD_NAMESPACE, POD_COUNT)
 
-    self.upgrade_cluster()
-    self.wait_for_upgrade()
-    self.wait_for_nodes_upgrade()
+    self.upgrade_cluster(IMAGE_413)
+    self.wait_for_upgrade(VERSION_413)
+    self.wait_for_nodes_upgrade(KUBELET_REGEXP_413)
 
-    self.enable_migration()
-    self.wait_for_migration()
+    # Wait for all nodes to be ready
+    self.wait_for_nodes_ready
 
-    # make sure that pods are still running after migration
+    # make sure that pods are still running after upgrade
+    log("********** Checking if pods are still running after 4.13 upgrade **********")
     self.wait_for_running_pods(POD_NAMESPACE, POD_COUNT)
+
+    log("********** Upgrading to 4.14 **********")
+    self.upgrade_cluster(IMAGE_414)
+    self.wait_for_upgrade(VERSION_414)
+    self.wait_for_nodes_upgrade(KUBELET_REGEXP_414)
+
+    log("Upgrade to 4.14 is finished")
+
+    # Wait for all nodes to be ready
+    self.wait_for_nodes_ready
+
+    # make sure that pods are still running after upgrade
+    log("********** Checking if pods are still running after 4.14 upgrade **********")
+    self.wait_for_running_pods(POD_NAMESPACE, POD_COUNT)
+
+
+
+    # self.enable_migration()
+    # self.wait_for_migration()
+
+    # # make sure that pods are still running after migration
+    # self.wait_for_running_pods(POD_NAMESPACE, POD_COUNT)
 
     self.delete_pods(POD_NAMESPACE, POD_COUNT)
     self.wait_for_pod_removal()
@@ -64,15 +94,29 @@ class UpgradeOCP
     end
   end
 
+  def wait_for_nodes_ready
+    loop do
+      system("kubectl wait --for=condition=Ready nodes --all --timeout=600s || return 1")
+      if $?.exitstatus == 0
+        break
+      end
+    end
+  end
+
+  def get_item_list(item_name)
+    item_raw = `oc get #{item_name} -o json`
+    JSON.parse(item_raw)['items']
+  end
+
   def set_kubeconfig()
     ENV['KUBECONFIG'] = "/home/hekumar/ocp-vs412/auth/kubeconfig"
   end
 
-  def upgrade_cluster()
-    system("oc adm upgrade --to-image=quay.io/openshift-release-dev/ocp-release:4.13.9-x86_64 --force --allow-explicit-upgrade")
+  def upgrade_cluster(image_name)
+    system("oc adm upgrade --to-image=#{image_name} --force --allow-explicit-upgrade")
   end
 
-  def wait_for_upgrade
+  def wait_for_upgrade(version_to_check)
     loop do
       cluster_version_raw = `oc get clusterversion -o json`
       cluster_version_json = JSON.load(cluster_version_raw)
@@ -83,7 +127,7 @@ class UpgradeOCP
         exact_cluster_version = history['version']
         cluster_version_state = history['state']
         log("Current version is #{exact_cluster_version} and state is #{cluster_version_state}")
-        if exact_cluster_version == FINAL_VERSION && cluster_version_state == "Completed"
+        if exact_cluster_version == version_to_check && cluster_version_state == "Completed"
           upgrade_finished = true
           log("Cluster upgrade completed")
         end
@@ -97,15 +141,16 @@ class UpgradeOCP
     end
   end
 
-  def wait_for_nodes_upgrade
+  def wait_for_nodes_upgrade(kubelet_regexp)
     loop do
       nodes_upgraded = true
       nodes_raw = `oc get nodes -o json`
       node_list = JSON.load(nodes_raw)['items']
       node_list.each do |node_dict|
         kubelet_version = node_dict['status']['nodeInfo']['kubeletVersion']
-        if kubelet_version !~ /v1\.26\.6*/
-          log("Found node with kubelet version #{kubelet_version}, still waiting")
+        node_name = get_resource_name(node_dict)
+        if !kubelet_regexp.match?(kubelet_version)
+          log("Found node #{node_name} with kubelet version #{kubelet_version}, still waiting")
           nodes_upgraded = false
         end
       end
@@ -257,6 +302,59 @@ class UpgradeOCP
 
   def get_resource_name(resource)
     resource["metadata"]["name"]
+  end
+end
+
+class Object
+  def blank?
+    respond_to?(:empty?) ? empty? : !self
+  end
+
+  # An object is present if it's not blank.
+  def present?
+    !blank?
+  end
+
+  def presence
+    self if present?
+  end
+end
+
+class NilClass #:nodoc:
+  def blank?
+    true
+  end
+end
+
+class FalseClass # :nodoc:
+  def blank?
+    true
+  end
+end
+
+class TrueClass # :nodoc:
+  def blank?
+    false
+  end
+end
+
+class Array #:nodoc:
+  alias_method :blank?, :empty?
+end
+
+class Hash #:nodoc:
+  alias_method :blank?, :empty?
+end
+
+class String #:nodoc:
+  def blank?
+    self !~ /\S/
+  end
+end
+
+class Numeric #:nodoc:
+  def blank?
+    false
   end
 end
 
