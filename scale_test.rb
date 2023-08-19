@@ -14,13 +14,13 @@ class UpgradeOCP
   POD_COUNT = 300
 
   VERSION_413 = "4.13.9"
-  VERSION_414 = "4.14.0-ec.4"
+  VERSION_414 = "4.14.0-0.nightly-2023-08-11-055332"
 
   KUBELET_REGEXP_413 = Regexp.new("v1\.26\.6")
-  KUBELET_REGEXP_414 = Regexp.new("v1\.27\.3")
+  KUBELET_REGEXP_414 = Regexp.new("v1\.27\.4")
 
   IMAGE_413 = "quay.io/openshift-release-dev/ocp-release:4.13.9-x86_64"
-  IMAGE_414 = "quay.io/openshift-release-dev/ocp-release:4.14.0-ec.4-x86_64"
+  IMAGE_414 = "registry.ci.openshift.org/ocp/release:4.14.0-0.nightly-2023-08-11-055332"
 
   def build_upgrade_destroy_loop
     loop do
