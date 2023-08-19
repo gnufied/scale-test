@@ -111,7 +111,7 @@ class UpgradeOCP
     loop do
       cluster_version_raw = `oc get clusterversion -o json`
       cluster_version_json = JSON.load(cluster_version_raw)
-      cluster_version_histories = cluster_version_json['items'][0]['status']['history']
+      cluster_version_histories = cluster_version_json['items'][0]['status']['history'] rescue []
       upgrade_finished = false
 
       cluster_version_histories.each do |history|
@@ -349,4 +349,4 @@ class Numeric #:nodoc:
   end
 end
 
-UpgradeOCP.new().build_upgrade_destroy_loop()
+UpgradeOCP.new().build_upgrade_destroy_loop
