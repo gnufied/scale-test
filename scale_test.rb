@@ -7,11 +7,9 @@ class UpgradeOCP
   include FileUtils
 
   INSTALL_COMMAND = "./openshift-install create cluster"
-  MACHINE_COUNT = 11
   RUNNING_STATE = "Running"
 
   POD_NAMESPACE = "emacs"
-  POD_COUNT = 300
 
   VERSION_413 = "4.13.9"
   VERSION_414 = "4.14.0-0.nightly-2023-08-11-055332"
@@ -22,22 +20,22 @@ class UpgradeOCP
   IMAGE_413 = "quay.io/openshift-release-dev/ocp-release:4.13.9-x86_64"
   IMAGE_414 = "registry.ci.openshift.org/ocp/release:4.14.0-0.nightly-2023-08-11-055332"
 
-  def build_upgrade_destroy_loop
-    loop do
-      log("Installing new cluster")
-      self.install_cluster()
+  def build_upgrade_destroy_loop(install_vars, install_count)
+    install_count.times do |i|
+      log("Installing new cluster #{i}")
+      self.install_cluster(install_vars)
       log("Waiting for 30 minutes before starting next cluster")
       sleep(30 * 60)
     end
   end
 
-  def install_cluster
-    self.start_install()
-    self.set_kubeconfig()
+  def install_cluster(install_vars)
+    self.start_install(install_vars)
+    self.set_kubeconfig(install_vars)
 
-    self.scale_machinesets(MACHINE_COUNT)
-    self.wait_for_machines(MACHINE_COUNT)
-    self.create_pods(POD_NAMESPACE, POD_COUNT)
+    self.scale_machinesets(install_vars[:machine_count])
+    self.wait_for_machines(install_vars[:machine_count])
+    self.create_pods(POD_NAMESPACE, install_vars[:pod_count])
 
     self.upgrade_cluster(IMAGE_413)
     self.wait_for_upgrade(VERSION_413)
@@ -48,7 +46,7 @@ class UpgradeOCP
 
     # make sure that pods are still running after upgrade
     log("********** Checking if pods are still running after 4.13 upgrade **********")
-    self.wait_for_running_pods(POD_NAMESPACE, POD_COUNT)
+    self.wait_for_running_pods(POD_NAMESPACE, install_vars[:pod_count])
 
     log("********** Upgrading to 4.14 **********")
     self.upgrade_cluster(IMAGE_414)
@@ -61,15 +59,15 @@ class UpgradeOCP
 
     # make sure that pods are still running after upgrade
     log("********** Checking if pods are still running after 4.14 upgrade **********")
-    self.wait_for_running_pods(POD_NAMESPACE, POD_COUNT)
+    self.wait_for_running_pods(POD_NAMESPACE, install_vars[:pod_count])
 
-    self.delete_pods(POD_NAMESPACE, POD_COUNT)
+    self.delete_pods(POD_NAMESPACE, install_vars[:pod_count])
     self.wait_for_pod_removal()
     self.wait_for_pv_removal()
 
     log("destroy the cluster")
 
-    self.destroy_cluster()
+    self.destroy_cluster(install_vars)
   end
 
   def wait_for_install_finish
@@ -99,8 +97,8 @@ class UpgradeOCP
     JSON.parse(item_raw)['items']
   end
 
-  def set_kubeconfig()
-    ENV['KUBECONFIG'] = "/home/hekumar/ocp-vs412/auth/kubeconfig"
+  def set_kubeconfig(install_vars)
+    ENV['KUBECONFIG'] = install_vars[:kube_config_path]
   end
 
   def upgrade_cluster(image_name)
@@ -173,15 +171,15 @@ class UpgradeOCP
     puts "#{Time.now} #{msg}"
   end
 
-  def start_install
-    cd("#{ENV['HOME']}/ocp-vs412") do
-      cp("#{ENV['HOME']}/persona-secrets/install-config-412-ibm-devqe-persistent.yaml", "install-config.yaml")
+  def start_install(install_vars)
+    cd(install_vars[:install_dir]) do
+      cp(install_vars[:install_file], "install-config.yaml")
       system(INSTALL_COMMAND)
     end
   end
 
-  def destroy_cluster
-    cd("#{ENV['HOME']}/ocp-vs412") do
+  def destroy_cluster(install_vars)
+    cd(install_vars[:install_dir]) do
       system("./openshift-install destroy cluster")
     end
   end
@@ -349,4 +347,21 @@ class Numeric #:nodoc:
   end
 end
 
-UpgradeOCP.new().build_upgrade_destroy_loop
+local_install_group = {
+  machine_count: 3,
+  pod_count: 90,
+  install_dir: File.join(ENV['HOME'], "shared-configs", "ocp-vs412"),
+  kube_config_path: File.join(ENV['HOME'], "shared-configs", "ocp-vs412", "auth", "kubeconfig"),
+  install_file: File.join(ENV['HOME'], "shared-configs", "persona-secrets", "install-config-412.yaml")
+}
+
+devqe_install_group = {
+  machine_count: 11,
+  pod_count: 300,
+  install_dir: File.join(ENV['HOME'], "ocp-vs412"),
+  kube_config_path: File.join(ENV['HOME'], "ocp-vs412", "auth", "kubeconfig"),
+  install_file: File.join(ENV['HOME'], "persona-secrets", "install-config-412-ibm-devqe-persistent.yaml")
+}
+
+
+UpgradeOCP.new().build_upgrade_destroy_loop(local_install_group, 100)
