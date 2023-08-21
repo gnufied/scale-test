@@ -364,4 +364,4 @@ devqe_install_group = {
 }
 
 
-UpgradeOCP.new().build_upgrade_destroy_loop(local_install_group, 100)
+UpgradeOCP.new().build_upgrade_destroy_loop(devqe_install_group, 100)
